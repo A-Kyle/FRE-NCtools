@@ -6,13 +6,17 @@
   This program generates various types of horizontal grids in netCDF file format
 
   AUTHOR: Zhi Liang (Zhi.Liang@noaa.gov)
-  NOAA Geophysical Fluid Dynamics Lab, Princeton, NJ
+          NOAA Geophysical Fluid Dynamics Lab, Princeton, NJ
 
   Modifications:
-  05/10/2020  -- Added multiple nest capability.  Bill Ramstrom, AOML/HRD
-
-
+  05/10/2020 -- Added multiple nest capability.  Bill Ramstrom, AOML/HRD
+  11/23/2020 -- Updated usage statement, sanity check against
+                new FV3 dycore codebase. Modify refine_ratio option for
+                global grid refinement (old code no longer valid,
+                see comment with tag [Ahern]). Formatting changes.
+                Kyle Ahern, AOML/HRD
 */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -57,8 +61,14 @@ char *usage[] = {
   "                  --simple_dx simple_dx --simple_dy simple_dy                    ",
   "                  --grid_name gridname --center center --verbose --shift_fac #   ",
   "                  --do_schmidt --stretch_fac # --target_lon # --target_lat #     ",
-  "                  --nest_grid --parent_tile # --refine_ratio # --halo #          ",
-  "                  --istart_nest # --iend_nest # --jstart_nest # --jend_nest #    ",
+  "                  --nest_grids nests                                             ",
+  "                  --parent_tile parent_tile(1),...parent_tile(nests-1)           ",
+  "                  --refine_ratio refine_ratio(1),...refine_ratio(nests-1)        ",
+  "                  --halo #                                                       ",
+  "                  --istart_nest istart_nest(1),...istart_nest(nests-1)           ",
+  "                  --iend_nest iend_nest(1),...iend_nest(nests-1)                 ",
+  "                  --jstart_nest jstart_nest(1),...jstart_nest(nests-1)           ",
+  "                  --jend_nest jend_nest(1),...jend_nest(nests-1)                 ",
   "                  --great_circle_algorithm --out_halo #                          ",
   "                                                                                 ",
   "   This program can generate different types of horizontal grid. The             ",
@@ -194,37 +204,51 @@ char *usage[] = {
   "                                                                                 ",
   "   --target_lat #             center latitude of the highest resolution tile     ",
   "                                                                                 ",
-  "  OBSOLETE  --nest_grid               set to create nest grid as well as the global grid.",
+  "   --nest_grids nests         set to create this # nested grids as well as the   ",
+  "                              global grid. This replaces the option --nest_grid. ",
+  "                              This option could only be set when grid_type is    ",
+  "                              'gnomonic_ed'. When it is set, besides 6 tile grid ",
+  "                              files created, there are #  more nest grids with   ",
+  "                              file name = $grid_name.tile${parent_tile}.nest.nc  ",
+  "                                                                                 ",
+  "   --nest_grid                >!OBSOLETE!< set to create nest grid as well as the",
+  "                              global grid.                                       ",
   "                              This option could only be set when grid_type is    ",
   "                              'gnomonic_ed'. When it is set, besides 6 tile grid ",
   "                              files created, there is one more nest grid with    ",
   "                              file name = $grid_name.tile${parent_tile}.nest.nc  ",
   "                                                                                 ",
-  " REPLACEMENT  --nest_grids #    set to create this many nested grids as well as the global grid.",
-  "                              This option could only be set when grid_type is    ",
-  "                              'gnomonic_ed'. When it is set, besides 6 tile grid ",
-  "                              files created, there are #  more nest grids with    ",
-  "                              file name = $grid_name.tile${parent_tile}.nest.nc  ",
+  "   --parent_tile parent_tile(1),...parent_tile(nests-1)                          ",
+  "                              Specify the comma-separated list of the parent tile",
+  "                              number(s) of nest grid(s).                         ",
   "                                                                                 ",
-  "   --parent_tile #            Specify the comma-separated list of the parent tile number(s) of nest grid(s).       ",
-  "                                                                                 ",
-  "   --refine_ratio #           Specify the comma-separated list of  refinement ratio(s) for nest grid(s).        ",
-  "                                                                                 ",
-  "   --istart_nest #            Specify the comma-separated list of starting i-direction index(es) of nest     ",
-  "                              grid(s) in parent tile supergrid(Fortran index).      ",
-  "                                                                                 ",
-  "   --iend_nest #              Specify the comma-separated list of ending i-direction index(es) of nest       ",
-  "                              grids in parent tile supergrid(Fortran index).      ",  
-  "                                                                                 ",
-  "   --jstart_nest #            Specify the comma-separated list of starting j-direction index(es) of nest     ",
-  "                              grids in parent tile supergrid(Fortran index).      ",
-  "                                                                                 ",
-  "   --jend_nest #              Specify the comma-separated list of ending j-direction index(es) of nest       ",
-  "                              grids in parent tile supergrid(Fortran index).      ",
+  "   --refine_ratio refine_ratio(1),...refine_ratio(nests-1)                       ",
+  "                              Specify the comma-separated list of refinement     ",
+  "                              ratio(s) for nest grid(s).                         ",
   "                                                                                 ",
   "   --halo #                   halo size to used in the atmosphere cubic sphere   ",
   "                              model. It only needs to be specified when          ",
-  "                              --nest_grid is set.                                ",
+  "                              --nest_grid(s) is set.                             ",
+  "                                                                                 ",
+  "   --istart_nest istart_nest(1),...istart_nest(nests-1)                          ",
+  "                              Specify the comma-separated list of starting       ",
+  "                              i-direction index(es) of nest                      ",
+  "                              grid(s) in parent tile supergrid(Fortran index).   ",
+  "                                                                                 ",
+  "   --iend_nest iend_nest(1),...iend_nest(nests-1)                                ",
+  "                              Specify the comma-separated list of ending         ",
+  "                              i-direction index(es) of nest                      ",
+  "                              grids in parent tile supergrid(Fortran index).     ",
+  "                                                                                 ",
+  "   --jstart_nest jstart_nest(1),...jstart_nest(nests-1)                          ",
+  "                              Specify the comma-separated list of starting       ",
+  "                              j-direction index(es) of nest                      ",
+  "                              grids in parent tile supergrid(Fortran index).     ",
+  "                                                                                 ",
+  "   --jend_nest jend_nest(1),...jend_nest(nests-1)                                ",
+  "                              Specify the comma-separated list of ending         ",
+  "                              j-direction index(es) of nest                      ",
+  "                              grids in parent tile supergrid(Fortran index).     ",
   "                                                                                 ",
   "   --great_circle_algorithm   When specified, great_circle_algorithm will be     ",
   "                              used to compute grid cell area.                    ",
@@ -341,29 +365,25 @@ char grid_version[] = "0.2";
 char tagname[] = "$Name: fre-nctools-bronx-10 $";
 
 
-int parse_comma_list(char *arg_list, int var_array[MAX_NESTS])
-{
+int parse_comma_list(char *arg_list, int var_array[MAX_NESTS]) {
   int i = 0;
   int j;
   char *ptr = strtok(arg_list, ",");
 
-  while(ptr != NULL && i < MAX_NESTS)
-    {
-      printf("string: %s\n", ptr);
-      
-      var_array[i] = atoi(ptr);
+  while(ptr != NULL && i < MAX_NESTS) {
+    printf("string: %s\n", ptr);
 
-      printf("int: %d\n", var_array[i]);
-      
-      ptr = strtok(NULL, ",");
-      i++;
-    }
+    var_array[i] = atoi(ptr);
 
+    printf("int: %d\n", var_array[i]);
 
-  for (j=i+1; j < MAX_NESTS; j++)
-    {
-      var_array[j] = 0;
-    }
+    ptr = strtok(NULL, ",");
+    i++;
+  }
+
+  for (j=i+1; j < MAX_NESTS; j++) {
+    var_array[j] = 0;
+  }
 
   return i;
 }
@@ -376,21 +396,19 @@ void fill_cubic_grid_halo(int nx, int ny, int halo, double *data, double *data1_
   int lw, le, ls, ln;
   int ntiles,nxp,nyp,nxph,nyph,i,j;
 
-  
   nxp = nx+ioff;
   nyp = ny+joff;
   nxph = nx+ioff+2*halo;
   nyph = ny+joff+2*halo;
-  
+
   for(i=0; i<nxph*nyph; i++) data[i] = MISSING_VALUE;
-  
+
   /* first copy computing domain data */
   for(j=1; j<=nyp; j++)
     for(i=1; i<=nxp; i++)
       data[j*nxph+i] = data1_all[tile*nxp*nyp+(j-1)*nxp+(i-1)];
-  
-  ntiles=6;
 
+  ntiles=6;
   if(tile%2 == 1) { /* tile 2, 4, 6 */
     lw = (tile+ntiles-1)%ntiles;
     le = (tile+ntiles+2)%ntiles;
@@ -419,76 +437,83 @@ void fill_cubic_grid_halo(int nx, int ny, int halo, double *data, double *data1_
     for(i=1; i<=nxp; i++) {
       data[i] = data1_all[ls*nxp*nyp+(ny-1)*nxp+i-1]; /*south */
       data[(nyp+1)*nxph+i] = data2_all[ln*nxp*nyp+(nxp-i)*nxp+joff]; /*north */
-    }    
+    }
 
   }
 }
 
-
-
 int main(int argc, char* argv[])
 {
-  int  nratio = 1;
-  char method[32] = "conformal";
-  char orientation[32] = "center_pole";
-  int  nxbnds=2, nybnds=2, nxbnds0=0, nybnds0=0, nxbnds1=0, nybnds1=0, nxbnds2=0, nybnds2=0;
-  int  nxbnds3=0, nybnds3=0;
-  double xbnds[MAXBOUNDS], ybnds[MAXBOUNDS];
+  int    nratio = 1;
+  char   method[32]  = "conformal";
+  char   orientation[32] = "center_pole";
+  char   grid_type[128]  = "regular_lonlat_grid";
+  char   my_grid_file[MAXBOUNDS][STRINGLEN];
+
+  double xbnds[MAXBOUNDS],   ybnds[MAXBOUNDS];
   double dx_bnds[MAXBOUNDS], dy_bnds[MAXBOUNDS];
-  int nlon[MAXBOUNDS-1], nlat[MAXBOUNDS-1];
-  char grid_type[128]="regular_lonlat_grid";
-  char my_grid_file[MAXBOUNDS][STRINGLEN];
-  double f_plane_latitude  = 100;
-  double lat_join=65.;
-  double shift_fac = 18.0;
-  int do_schmidt = 0;
+  int    nlon[MAXBOUNDS-1],  nlat[MAXBOUNDS-1];
+  int    nxbnds  = 2, nybnds  = 2;
+  int    nxbnds0 = 0, nybnds0 = 0;
+  int    nxbnds1 = 0, nybnds1 = 0;
+  int    nxbnds2 = 0, nybnds2 = 0;
+  int    nxbnds3 = 0, nybnds3 = 0;
+
+  double f_plane_latitude = 100;
+  double lat_join   = 65.0;
+  double shift_fac  = 18.0;
+  int    do_schmidt = 0;
   double stretch_factor = 0.0;
-  double target_lon   = 0.0;
-  double target_lat   = 0.0;
+  double target_lon = 0.0;
+  double target_lat = 0.0;
 
-  int    nest_grids    = 0;
-
+  /* Variables for multiple nesting */
+  int nest_grids    = 0;
   int num_nest_args = 0;
   int nn = 0;
 
-  
-  // Array variables for nests
-  int    parent_tile[MAX_NESTS];
-  int    refine_ratio[MAX_NESTS];
-  int    istart_nest[MAX_NESTS];
-  int    iend_nest[MAX_NESTS];
-  int    jstart_nest[MAX_NESTS];
-  int    jend_nest[MAX_NESTS];
+  /* Arrays for nests */
+  int parent_tile[MAX_NESTS]  = { 0 };
+  int refine_ratio[MAX_NESTS] = { 0 };
+  int istart_nest[MAX_NESTS]  = { 0 };
+  int iend_nest[MAX_NESTS]    = { 0 };
+  int jstart_nest[MAX_NESTS]  = { 0 };
+  int jend_nest[MAX_NESTS]    = { 0 };
 
-  int    halo = 0;
-  int    out_halo=0;
-  int    present_stretch_factor = 0;
-  int    present_target_lon = 0;
-  int    present_target_lat = 0;
-  int    use_great_circle_algorithm = 0;
+  int halo     = 0;
+  int out_halo = 0;
+  int present_stretch_factor = 0;
+  int present_target_lon     = 0;
+  int present_target_lat     = 0;
+  int use_great_circle_algorithm = 0;
   unsigned int verbose = 0;
-  double simple_dx=0, simple_dy=0;
-  int nx, ny, nxp, nyp, ntiles=1, ntiles_global=1;
-  int *nxl=NULL, *nyl=NULL;
-  unsigned int ntiles_file;
-  double *x=NULL, *y=NULL, *dx=NULL, *dy=NULL, *angle_dx=NULL, *angle_dy=NULL, *area=NULL;
+  double simple_dx = 0, simple_dy = 0;
+  int nx, ny, nxp, nyp;
+  int ntiles = 1, ntiles_global = 1;
 
-  int isc, iec, jsc, jec;
+  unsigned int ntiles_file;
+  int    *nxl      = NULL, *nyl      = NULL;
+  double *x        = NULL, *y        = NULL;
+  double *dx       = NULL, *dy       = NULL;
+  double *angle_dx = NULL, *angle_dy = NULL;
+  double *area     = NULL;
+
+  int  isc, iec, jsc, jec;
   int  use_legacy;
   char history[2560];
-  char gridname[128] = "horizontal_grid";
-  char center[32] = "none";
-  char geometry[32] = "spherical";
-  char projection[32] = "none";
-  char arcx[32] = "small_circle";
+  char gridname[128]       = "horizontal_grid";
+  char center[32]          = "none";
+  char geometry[32]        = "spherical";
+  char projection[32]      = "none";
+  char arcx[32]            = "small_circle";
   char north_pole_tile[32] = "0.0 90.0";
   char north_pole_arcx[32] = "0.0 90.0";
   char discretization[32]  = "logically_rectangular";
   char conformal[32]       = "true";
   char mesg[256], str[128];
   char entry[MAXBOUNDS*STRINGLEN];
-  int n, errflg, c, i;  
-  int option_index;
+  int  n, errflg, c, i;
+  int  option_index;
 
   static struct option long_options[] = {
     {"grid_type",       required_argument, NULL, 'a'},
@@ -513,7 +538,6 @@ int main(int argc, char* argv[])
     {"target_lon",      required_argument, NULL, 'y'},
     {"target_lat",      required_argument, NULL, 'z'},
     {"nest_grids",      required_argument, NULL, 'A'},
-    {"nest_grid",       no_argument, NULL, 'Z'},
     {"refine_ratio",    required_argument, NULL, 'B'},
     {"parent_tile",     required_argument, NULL, 'C'},
     {"istart_nest",     required_argument, NULL, 'D'},
@@ -524,32 +548,30 @@ int main(int argc, char* argv[])
     {"shift_fac",       required_argument, NULL, 'I'},
     {"great_circle_algorithm", no_argument, NULL, 'J'},
     {"out_halo",        required_argument, NULL, 'K'},
+    {"nest_grid",       no_argument,       NULL, 'L'}, /* Obsolete (bkward compatible) */
     {"help",            no_argument,       NULL, 'h'},
     {"verbose",         no_argument,       NULL, 'v'},
-
     {0, 0, 0, 0},
   };
 
   /* start parallel */
   mpp_init(&argc, &argv);
-  mpp_domain_init();  
+  mpp_domain_init();
 
   /* There is no need to run this tool in parallel, so we limit this tool
-     to be run on single processor*/
+     to be run on single processor */
   if(mpp_npes() > 1) mpp_error( "make_hgrid: make_hgrid must be run one processor, contact developer");
-  
-  /*
-   * process command line
-   */
+
+  /* process command line */
   errflg = argc <3;
-  
+
   /* define history to be the history in the grid file */
   strcpy(history,argv[0]);
   for(i=1;i<argc;i++) {
     strcat(history, " ");
     strcat(history, argv[i]);
   }
-  
+
   while ((c = getopt_long(argc, argv, "", long_options, &option_index)) != -1) {
     switch (c) {
     case 'a':
@@ -564,7 +586,7 @@ int main(int argc, char* argv[])
       break;
     case 'd':
       nybnds0 = atoi(optarg);
-      break;        
+      break;
     case 'e':
       strcpy(entry, optarg);
       nxbnds1 = get_double_entry(entry, xbnds);
@@ -583,10 +605,10 @@ int main(int argc, char* argv[])
       break;
     case 'j':
       lat_join = atof(optarg);
-      break; 
+      break;
     case 'k':
       nratio = atoi(optarg);
-      break;      
+      break;
     case 'l':
       simple_dx = atof(optarg);
       break;
@@ -628,33 +650,23 @@ int main(int argc, char* argv[])
     case 'A':
       nest_grids = atoi(optarg);
       break;
-    case 'Z':
-      // Backwards compatibility -- allow single nest
-      nest_grids = 1;
-      break;
     case 'B':
-      //refine_ratio = atoi(optarg);
-      num_nest_args =  parse_comma_list(optarg, refine_ratio);
+      num_nest_args = parse_comma_list(optarg, refine_ratio);
       break;
     case 'C':
-      //parent_tile = atoi(optarg);
-      num_nest_args =  parse_comma_list(optarg, parent_tile);
+      num_nest_args = parse_comma_list(optarg, parent_tile);
       break;
     case 'D':
-      //istart_nest = atoi(optarg);
-      num_nest_args =  parse_comma_list(optarg, istart_nest);
+      num_nest_args = parse_comma_list(optarg, istart_nest);
       break;
     case 'E':
-      //iend_nest = atoi(optarg);
-      num_nest_args =  parse_comma_list(optarg, iend_nest);
+      num_nest_args = parse_comma_list(optarg, iend_nest);
       break;
     case 'F':
-      //jstart_nest = atoi(optarg);
-      num_nest_args =  parse_comma_list(optarg, jstart_nest);
+      num_nest_args = parse_comma_list(optarg, jstart_nest);
       break;
     case 'G':
-      //jend_nest = atoi(optarg);
-      num_nest_args =  parse_comma_list(optarg, jend_nest);
+      num_nest_args = parse_comma_list(optarg, jend_nest);
       break;
     case 'H':
       halo = atoi(optarg);
@@ -667,26 +679,28 @@ int main(int argc, char* argv[])
       break;
     case 'K':
       out_halo = atoi(optarg);
-      break;      
+      break;
+    case 'L': /* Single-nest option backwards compatibility */
+      nest_grids = 1;
+      break;
     case 'v':
       verbose = 1;
       break;
     case 'h':
       errflg++;
       break;
-
-
     case '?':
-      errflg++;      
-    }      
+      errflg++;
+      break;
+    }
   }
-  
-  if (errflg ) {
+
+  if (errflg) {
     char **u = usage;
     while (*u) { fprintf(stderr, "%s\n", *u); u++; }
     exit(2);
-  }  
-  
+  }
+
   if(mpp_pe() == mpp_root_pe() && verbose) printf("==>NOTE: the grid type is %s\n",grid_type);
 
   if(strcmp(grid_type,"regular_lonlat_grid") ==0 )
@@ -709,17 +723,17 @@ int main(int argc, char* argv[])
     my_grid_type = BETA_PLANE_GRID;
   else
     mpp_error("make_hgrid: only grid_type = 'regular_lonlat_grid', 'tripolar_grid', 'from_file', "
-	      "'gnomonic_ed', 'conformal_cubic_grid', 'simple_cartesian_grid', "
-              "'spectral_grid', 'f_plane_grid' and 'beta_plane_grid' is implemented");  
+      	      "'gnomonic_ed', 'conformal_cubic_grid', 'simple_cartesian_grid', "
+              "'spectral_grid', 'f_plane_grid' and 'beta_plane_grid' is implemented");
 
   if(my_grid_type != GNOMONIC_ED && out_halo  != 0)
     mpp_error("make_hgrid: out_halo should not be set when grid_type = gnomonic_ed");
   if(out_halo !=0 && out_halo != 1)
     mpp_error("make_hgrid: out_halo should be 0 or 1");
-  
+
   if( my_grid_type != GNOMONIC_ED && do_schmidt )
     mpp_error("make_hgrid: --do_schmidt should not be set when grid_type is not 'gnomonic_ed'");
-  
+
   use_legacy = 0;
   /* check the command-line arguments to make sure the value are suitable */
   if( my_grid_type == REGULAR_LONLAT_GRID || my_grid_type == TRIPOLAR_GRID ||
@@ -727,15 +741,15 @@ int main(int argc, char* argv[])
     int num_specify;
     nxbnds = nxbnds0; nybnds = nybnds0;
     if( nxbnds <2 || nybnds < 2) mpp_error("make_hgrid: grid type is 'regular_lonlat_grid', 'tripolar_grid', 'f_plane_grid' or 'beta_plane_grid', "
-					   "both nxbnds and nybnds should be no less than 2");
+					    "both nxbnds and nybnds should be no less than 2");
     if( nxbnds != nxbnds1 ) mpp_error("make_hgrid: grid type is 'regular_lonlat_grid, 'tripolar_grid', 'f_plane_grid' or 'beta_plane_grid', "
 				      "nxbnds does not match number of entry in xbnds");
     if( nybnds != nybnds1 ) mpp_error("make_hgrid: grid type is 'regular_lonlat_grid, 'tripolar_grid', 'f_plane_grid' or 'beta_plane_grid', "
 				      "nybnds does not match number of entry in ybnds");
     num_specify = 0;
-    if( nxbnds2 > 0 && nybnds2 > 0 ) num_specify ++;
+    if( nxbnds2 > 0 && nybnds2 > 0 ) num_specify++;
     if( nxbnds3 > 0 && nybnds3 > 0 ) {
-      num_specify ++;
+      num_specify++;
       use_legacy = 1;
     }
 
@@ -751,21 +765,20 @@ int main(int argc, char* argv[])
     }
     else {
       if( nxbnds != nxbnds2+1 ) mpp_error("make_hgrid: grid type is 'tripolar_grid', 'tripolar_grid', 'f_plane_grid' or 'beta_plane_grid', "
-					  "nxbnds does not match number of entry in nlon");
+					"nxbnds does not match number of entry in nlon");
       if( nybnds != nybnds2+1 ) mpp_error("make_hgrid: grid type is 'tripolar_grid', 'tripolar_grid', 'f_plane_grid' or 'beta_plane_grid', "
-					  "nybnds does not match number of entry in nlat");
+					"nybnds does not match number of entry in nlat");
     }
-  }  
-
+  }
 
   if( my_grid_type == CONFORMAL_CUBIC_GRID || my_grid_type == GNOMONIC_ED ) {
     ntiles = 6;
     ntiles_global = 6;
   }
-  
+
   if(  my_grid_type != GNOMONIC_ED && nest_grids )
     mpp_error("make_hgrid: --nest_grids can be set only when grid_type = 'gnomonic_ed'");
-  
+
   if( my_grid_type == TRIPOLAR_GRID ) {
     strcpy(projection, "tripolar");
     if( nxbnds != 2) mpp_error("make_hgrid: grid type is 'tripolar_grid', nxbnds should be 2");
@@ -774,141 +787,137 @@ int main(int argc, char* argv[])
     /* For ascii file, nlon and nlat should be specified through --nlon, --nlat
        For netcdf file, grid resolution will be read from grid file
     */
-    
+
     if(ntiles_file == 0) mpp_error("make_hgrid: grid_type is 'from_file', but my_grid_file is not specified");
     ntiles = ntiles_file;
     for(n=0; n<ntiles; n++) {
-      if(strstr(my_grid_file[n],".nc") ) {
-	/* get the grid size for each tile, the grid is on model grid, should need to multiply by 2 */
-	int fid;
-	fid = mpp_open(my_grid_file[n], MPP_READ);
-        if(mpp_dim_exist(fid, "grid_xt") ) {
-	  if( mpp_dim_exist(fid, "grid_yt") == 0)
-	    mpp_error("make_hgrid: grid_yt should be a dimension when grid_xt is a dimension");
-	  nlon[n] = mpp_get_dimlen(fid, "grid_xt")*2;
-	  nlat[n] = mpp_get_dimlen(fid, "grid_yt")*2;
-	}
-	else if(mpp_dim_exist(fid, "rlon") ) {
-	  if( mpp_dim_exist(fid, "rlat") == 0)
-	    mpp_error("make_hgrid: rlat should be a dimension when rlon is a dimension");
+      if( strstr(my_grid_file[n],".nc") ) {
+      	/* get the grid size for each tile, the grid is on model grid, should need to multiply by 2 */
+      	int fid;
+      	fid = mpp_open(my_grid_file[n], MPP_READ);
+        if( mpp_dim_exist(fid, "grid_xt") ) {
+      	  if( mpp_dim_exist(fid, "grid_yt") == 0)
+	          mpp_error("make_hgrid: grid_yt should be a dimension when grid_xt is a dimension");
+	        nlon[n] = mpp_get_dimlen(fid, "grid_xt")*2;
+	        nlat[n] = mpp_get_dimlen(fid, "grid_yt")*2;
+      	}
+	      else if( mpp_dim_exist(fid, "rlon") ) {
+	        if( mpp_dim_exist(fid, "rlat") == 0)
+	          mpp_error("make_hgrid: rlat should be a dimension when rlon is a dimension");
           nlon[n] = mpp_get_dimlen(fid, "rlon")*2;
-	  nlat[n] = mpp_get_dimlen(fid, "rlat")*2;
-	}
-	else if(mpp_dim_exist(fid, "lon") ) {
-	  if( mpp_dim_exist(fid, "lat") == 0)
-	    mpp_error("make_hgrid: lat should be a dimension when lon is a dimension");
+	        nlat[n] = mpp_get_dimlen(fid, "rlat")*2;
+	      }
+	      else if( mpp_dim_exist(fid, "lon") ) {
+	        if( mpp_dim_exist(fid, "lat") == 0)
+	          mpp_error("make_hgrid: lat should be a dimension when lon is a dimension");
           nlon[n] = mpp_get_dimlen(fid, "lon")*2;
-	  nlat[n] = mpp_get_dimlen(fid, "lat")*2;
-	}
-	else if(mpp_dim_exist(fid, "i") ) {
-	  if( mpp_dim_exist(fid, "j") == 0)
-	    mpp_error("make_hgrid: j should be a dimension when i is a dimension");
+	        nlat[n] = mpp_get_dimlen(fid, "lat")*2;
+      	}
+	      else if( mpp_dim_exist(fid, "i") ) {
+	        if( mpp_dim_exist(fid, "j") == 0)
+	          mpp_error("make_hgrid: j should be a dimension when i is a dimension");
           nlon[n] = mpp_get_dimlen(fid, "i")*2;
-	  nlat[n] = mpp_get_dimlen(fid, "j")*2;
-	}
-	else if(mpp_dim_exist(fid, "x") ) {
-	  if( mpp_dim_exist(fid, "y") == 0)
-	    mpp_error("make_hgrid: y should be a dimension when x is a dimension");
+	        nlat[n] = mpp_get_dimlen(fid, "j")*2;
+	      }
+	      else if( mpp_dim_exist(fid, "x") ) {
+	        if( mpp_dim_exist(fid, "y") == 0)
+	          mpp_error("make_hgrid: y should be a dimension when x is a dimension");
           nlon[n] = mpp_get_dimlen(fid, "x")*2;
-	  nlat[n] = mpp_get_dimlen(fid, "y")*2;
-	}
-	
-	else {
-	  mpp_error("make_hgrid: none of grid_xt, rlon, lon, x, and i is a dimension in input file");
-	}	
-	mpp_close(fid);
-      }
+	        nlat[n] = mpp_get_dimlen(fid, "y")*2;
+      	}
+      	else {
+      	  mpp_error("make_hgrid: none of grid_xt, rlon, lon, x, and i is a dimension in input file");
+	      }
+      	mpp_close(fid);
+      } /* end if ( strstr(my_grid_file[n],".nc") ) */
       else {
-	if(nxbnds2 != ntiles || nybnds2 != ntiles ) mpp_error("make_hgrid: grid type is 'from_file', number entry entered "
-							      "through --nlon and --nlat should be equal to number of files "
+	      if( nxbnds2 != ntiles || nybnds2 != ntiles )
+          mpp_error("make_hgrid: grid type is 'from_file', number entry entered "
+						        "through --nlon and --nlat should be equal to number of files "
 							      "specified through --my_grid_file");
       }
-    }
+    } /* end for n=0 to n<ntiles */
     /* for simplify purpose, currently we assume all the tile have the same grid size */
     for(n=1; n<ntiles; n++) {
-      if( nlon[n] != nlon[0] || nlat[n] != nlat[0])  mpp_error("make_hgrid: grid_type is from_file, all the tiles should "
-							       "have same grid size, contact developer");
+      if( nlon[n] != nlon[0] || nlat[n] != nlat[0])
+        mpp_error("make_hgrid: grid_type is from_file, all the tiles should "
+							    "have same grid size, contact developer");
     }
   }
   else if( my_grid_type == SIMPLE_CARTESIAN_GRID ) {
     strcpy(geometry, "planar");
     strcpy(north_pole_tile, "none");
-    if(nxbnds1 != 2 || nybnds1 != 2 ) mpp_error("make_hgrid: grid type is 'simple_cartesian_grid', number entry entered "
-						"through --xbnds and --ybnds should be 2");
-    if(nxbnds2 != 1 || nybnds2 != 1 ) mpp_error("make_hgrid: grid type is 'simple_cartesian_grid', number entry entered "
-						"through --nlon and --nlat should be 1");
-    if(simple_dx == 0 || simple_dy == 0) mpp_error("make_hgrid: grid_type is 'simple_cartesian_grid', "
-						   "both simple_dx and simple_dy both should be specified");
+    if(nxbnds1 != 2 || nybnds1 != 2 )
+      mpp_error("make_hgrid: grid type is 'simple_cartesian_grid', number entry entered "
+                "through --xbnds and --ybnds should be 2");
+    if(nxbnds2 != 1 || nybnds2 != 1 )
+      mpp_error("make_hgrid: grid type is 'simple_cartesian_grid', number entry entered "
+                "through --nlon and --nlat should be 1");
+    if(simple_dx == 0 || simple_dy == 0) 
+      mpp_error("make_hgrid: grid_type is 'simple_cartesian_grid', "
+                "both simple_dx and simple_dy both should be specified");
   }
   else if( my_grid_type == SPECTRAL_GRID ) {
-    if(nxbnds2 != 1 || nybnds2 != 1 ) mpp_error("make_hgrid: grid type is 'spectral_grid', number entry entered "
-						"through --nlon and --nlat should be 1");    
+    if(nxbnds2 != 1 || nybnds2 != 1 )
+      mpp_error("make_hgrid: grid type is 'spectral_grid', number entry entered "
+                "through --nlon and --nlat should be 1");
   }
-  else if( my_grid_type == CONFORMAL_CUBIC_GRID ){
+  else if( my_grid_type == CONFORMAL_CUBIC_GRID ) {
     strcpy(projection, "cube_gnomonic");
     strcpy(conformal, "FALSE");
-    if(nxbnds2 != 1 ) mpp_error("make_hgrid: grid type is 'conformal_cubic_grid', number entry entered "
-				"through --nlon should be 1");
-    if(nratio < 1) mpp_error("make_hgrid: grid type is 'conformal_cubic_grid', nratio should be a positive integer");
+    if(nxbnds2 != 1 )
+      mpp_error("make_hgrid: grid type is 'conformal_cubic_grid', number entry entered "
+                "through --nlon should be 1");
+    if(nratio < 1)
+      mpp_error("make_hgrid: grid type is 'conformal_cubic_grid', nratio should be a positive integer");
   }
   else if( my_grid_type == GNOMONIC_ED ) {
     strcpy(projection, "cube_gnomonic");
     strcpy(conformal, "FALSE");
     if( do_schmidt ) {
       if( present_stretch_factor == 0 || present_target_lon == 0 || present_target_lat == 0 )
-	mpp_error("make_hgrid: grid type is 'gnomonic_ed, --stretch_factor, --target_lon "
-		  "and --target_lat must be set when --do_schmidt is set");
+        mpp_error("make_hgrid: grid type is 'gnomonic_ed, --stretch_factor, --target_lon "
+                  "and --target_lat must be set when --do_schmidt is set");
     }
 
-    //if(nest_grids >= 1) {
+    // if(nest_grids >= 1) {
     for (n=0; n < nest_grids; n++) {
-
-      if(refine_ratio[n] == 0) mpp_error("make_hgrid: --refine_ratio must be set when --nest_grids is set");
-      if(parent_tile[n] == 0 && mpp_pe()==mpp_root_pe()) {
-	printf("NOTE from make_hgrid: parent_tile is 0, the output grid will have resolution refine_ration*nlon");
-      }
-      else {
-	if(istart_nest[n] == 0) mpp_error("make_hgrid: --istart_nest must be set when --nest_grids is set");
-	if(iend_nest[n] == 0) mpp_error("make_hgrid: --iend_nest must be set when --nest_grids is set");
-	if(jstart_nest[n] == 0) mpp_error("make_hgrid: --jstart_nest must be set when --nest_grids is set");
-	if(jend_nest[n] == 0) mpp_error("make_hgrid: --jend_nest must be set when --nest_grids is set");
-	if(halo == 0 ) mpp_error("make_hgrid: --halo must be set when --nest_grids is set");
-	ntiles++;   /* one more tile for the nest region */
-	if (verbose) printf("Configuration for nest %d validated.\n", ntiles);
-	
-      }
+      if(refine_ratio[n] <= 0) mpp_error("make_hgrid: --refine_ratio must be set and positive when --nest_grids is set");
+      if(parent_tile[n] <= 0)  mpp_error("make_hgrid: --parent_tile must be set and positive when --nest_grids is set");
+      if(istart_nest[n] <= 0)  mpp_error("make_hgrid: --istart_nest must be set and positive when --nest_grids is set");
+      if(iend_nest[n] <= 0)    mpp_error("make_hgrid: --iend_nest must be set and positive when --nest_grids is set");
+      if(jstart_nest[n] <= 0)  mpp_error("make_hgrid: --jstart_nest must be set and positive when --nest_grids is set");
+      if(jend_nest[n] <= 0)    mpp_error("make_hgrid: --jend_nest must be set and positive when --nest_grids is set");
+      if(halo <= 0)            mpp_error("make_hgrid: --halo must be set and positive when --nest_grids is set");
+      ntiles++;   /* one more tile for the nest region */
+      if (verbose) printf("Configuration for nest %d validated.\n", ntiles);
     }
-
-
-
     if (verbose) {
       printf("Updated number of tiles, including nests (ntiles): %d\n", ntiles);
     }
-
-    if(nxbnds2 != 1 ) mpp_error("make_hgrid: grid type is 'gnomonic_cubic_grid', number entry entered "
-				"through --nlon should be 1");
+    if(nxbnds2 != 1)
+      mpp_error("make_hgrid: grid type is 'gnomonic_cubic_grid', number entry entered "
+                "through --nlon should be 1");
   }
   else if( my_grid_type == F_PLANE_GRID ||  my_grid_type == BETA_PLANE_GRID) {
     if(f_plane_latitude > 90 || f_plane_latitude < -90.)
       mpp_error("make_hgrid: f_plane_latitude should be between -90 and 90.");
     if(f_plane_latitude > ybnds[nybnds-1] || f_plane_latitude < ybnds[0] ) {
       if(mpp_pe() == mpp_root_pe())
-	printf("Warning from make_hgrid: f_plane_latitude is not inside the latitude range of the grid\n");
+        printf("Warning from make_hgrid: f_plane_latitude is not inside the latitude range of the grid\n");
     }
     if(mpp_pe() == mpp_root_pe())
       printf("make_hgrid: setting geometric factor according to f-plane with f_plane_latitude = %g\n", f_plane_latitude );
   }
 
-
-
   if (verbose) {
-    printf("[INFO] make_hgrid.c Number of tiles (ntiles): %d\n", ntiles); 
-    printf("[INFO] make_hgrid.c Number of global tiles (ntiles_global): %d\n", ntiles_global); 
+    printf("[INFO] make_hgrid.c Number of tiles (ntiles): %d\n", ntiles);
+    printf("[INFO] make_hgrid.c Number of global tiles (ntiles_global): %d\n", ntiles_global);
   }
 
   nxl = (int *)malloc(ntiles*sizeof(int));
   nyl = (int *)malloc(ntiles*sizeof(int));
-  
+
   /* get super grid size */
   if(use_legacy) {
     nxl[0] = get_legacy_grid_size(nxbnds, xbnds, dx_bnds);
@@ -916,19 +925,28 @@ int main(int argc, char* argv[])
   }
   else {
     if( my_grid_type == GNOMONIC_ED || my_grid_type == CONFORMAL_CUBIC_GRID ) {
-      for(n=0; n<ntiles_global; n++) {	
-	nxl[n] = nlon[0];
-	nyl[n] = nxl[n];
-	if(nest_grids && parent_tile == 0) {
-	  nxl[n] *= refine_ratio[0];
-	  nyl[n] *= refine_ratio[0];
-	}
+      /* NOTE: The if-block in the loop below is changed with multiple nests.
+               It appeared to allow refinement of the global grid
+               without using any nests. However, the method used the
+               nesting parameters "parent_tile" and "refine_ratio" to
+               achieve this, which was enabled by setting parent_tile = 0 .
+               This is no longer possible, as parent_tile is now an array.
+               Instead, if the first value in the list of parent_tile values is 0,
+               then the first value in the list of refine_ratio values will be
+               applied to the global grid. This global-refinement application
+               may not be valid for all permutations of nesting and refinement. [Ahern]
+      */
+      for(n=0; n<ntiles_global; n++) {
+        nxl[n] = nlon[0];
+        nyl[n] = nxl[n];
+        if(nest_grids && parent_tile[0] == 0) {
+           nxl[n] *= refine_ratio[0];
+           nyl[n] *= refine_ratio[0];
+        }
       }
-
-      for (n=ntiles_global; n < ntiles; n++){
-	nn = n - ntiles_global;
-	
-	nxl[n] = (iend_nest[nn]-istart_nest[nn]+1)*refine_ratio[nn];
+      for (n=ntiles_global; n < ntiles; n++) {
+        nn = n - ntiles_global;
+        nxl[n] = (iend_nest[nn]-istart_nest[nn]+1)*refine_ratio[nn];
         nyl[n] = (jend_nest[nn]-jstart_nest[nn]+1)*refine_ratio[nn];
       }
     }
@@ -936,7 +954,7 @@ int main(int argc, char* argv[])
       nxl[0] = 0;
       nyl[0] = 0;
       for(n=0; n<nxbnds-1; n++) nxl[0] += nlon[n];
-      for(n=0; n<nybnds-1; n++) nyl[0] += nlat[n];  
+      for(n=0; n<nybnds-1; n++) nyl[0] += nlat[n];
     }
   }
   nx = nxl[0];
@@ -946,7 +964,7 @@ int main(int argc, char* argv[])
 
   if(strcmp(center,"none") && strcmp(center,"c_cell") && strcmp(center,"t_cell") )
     mpp_error("make_hgrid: center should be 'none', 'c_cell' or 't_cell' ");
-  
+
   /* create grid information */
   {
     int size1, size2, size3, size4;
@@ -956,22 +974,18 @@ int main(int argc, char* argv[])
       printf("[INFO] tile: %d, nxl[%d], nyl[%d], ntiles: %d\n", n_nest, nxl[n_nest], nyl[n_nest], ntiles);
     }
 
-
     size1 = nxp     *  nyp    * ntiles_global;
     size2 = nxp     * (nyp+1) * ntiles_global;
     size3 = (nxp+1) * nyp     * ntiles_global;
     size4 = nxp     * nyp     * ntiles_global;
-  
-    //    if( nest_grids) { /* nest grid is the last tile */
+
     for (n_nest = ntiles_global; n_nest < ntiles_global + nest_grids; n_nest++) { /* nest grid is the last tile */
       if (verbose) printf("[INFO] Adding memory size for nest %d, nest_grids: %d\n", n_nest, nest_grids);
-      size1 += (nxl[n_nest] +1)    *  (nyl[n_nest]+1);
-      size2 += (nxl[n_nest] +1)    * (nyl[n_nest]+2);
-      size3 += (nxl[n_nest]+2) *  (nyl[n_nest]+1);
-      size4 += (nxl[n_nest]+1)     *  (nyl[n_nest]+1);
+      size1 += (nxl[n_nest]+1) * (nyl[n_nest]+1);
+      size2 += (nxl[n_nest]+1) * (nyl[n_nest]+2);
+      size3 += (nxl[n_nest]+2) * (nyl[n_nest]+1);
+      size4 += (nxl[n_nest]+1) * (nyl[n_nest]+1);
     }
-
-
 
     if (verbose) printf("[INFO] Allocating arrays of size %d for x, y based on nxp: %d nyp: %d ntiles: %d\n", size1, nxp, nyp, ntiles);
     x        = (double *) malloc(size1*sizeof(double));
@@ -1017,10 +1031,8 @@ int main(int argc, char* argv[])
   else if(my_grid_type==GNOMONIC_ED)
     create_gnomonic_cubic_grid(grid_type, nxl, nyl, x, y, dx, dy, area, angle_dx, angle_dy,
 			       shift_fac, do_schmidt, stretch_factor, target_lon, target_lat,
-			       nest_grids, 
-			       parent_tile, refine_ratio,
-			       istart_nest, iend_nest, jstart_nest, jend_nest, 
-			       halo );
+			       nest_grids, parent_tile, refine_ratio,
+			       istart_nest, iend_nest, jstart_nest, jend_nest, halo );
   else if((my_grid_type==F_PLANE_GRID) || (my_grid_type==BETA_PLANE_GRID))
     create_f_plane_grid(&nxbnds, &nybnds, xbnds, ybnds, nlon, nlat, dx_bnds, dy_bnds,
 			use_legacy, f_plane_latitude, &isc, &iec, &jsc, &jec, x, y, dx, dy, area, angle_dx, center);
@@ -1037,21 +1049,17 @@ int main(int argc, char* argv[])
     pos_c = 0;
     pos_e = 0;
     pos_t = 0;
-    pos_n = 0;    
+    pos_n = 0;
     for(n=0 ; n< ntiles; n++) {
 
       sprintf(tilename, "tile%d", n+1);
-      if(ntiles>1)
-	sprintf(outfile, "%s.tile%d.nc", gridname, n+1);
-      else
-	sprintf(outfile, "%s.nc", gridname);
+      if(ntiles>1) sprintf(outfile, "%s.tile%d.nc", gridname, n+1);
+      else sprintf(outfile, "%s.nc", gridname);
 
-      if (verbose) {
-	printf("Writing out %s.\n", outfile);
-      }
+      if (verbose) printf("Writing out %s.\n", outfile);
 
       fid = mpp_open(outfile, MPP_WRITE);
-      /* define dimenison */
+      /* define dimension */
       nx = nxl[n];
       ny = nyl[n];
       if (verbose) printf("[INFO] Outputting arrays of size nx: %d and ny: %d for tile: %d\n", nx, ny, n);
@@ -1064,125 +1072,129 @@ int main(int argc, char* argv[])
       dimlist[4] = mpp_def_dim(fid, "nyp", nyp+2*out_halo);
       /* define variable */
       if( strcmp(north_pole_tile, "none") == 0) /* no north pole, then no projection */
-	id_tile = mpp_def_var(fid, "tile", MPP_CHAR, 1, dimlist, 4, "standard_name", "grid_tile_spec",
-			      "geometry", geometry, "discretization", discretization, "conformal", conformal );
-      else if( strcmp(projection, "none") == 0) 
-	id_tile = mpp_def_var(fid, "tile", MPP_CHAR, 1, dimlist, 5, "standard_name", "grid_tile_spec",
-			      "geometry", geometry, "north_pole", north_pole_tile, "discretization",
-			      discretization, "conformal", conformal );
+	      id_tile = mpp_def_var(fid, "tile", MPP_CHAR, 1, dimlist, 4, "standard_name", "grid_tile_spec",
+			                        "geometry", geometry, "discretization", discretization, "conformal", conformal);
+      else if( strcmp(projection, "none") == 0)
+	      id_tile = mpp_def_var(fid, "tile", MPP_CHAR, 1, dimlist, 5, "standard_name", "grid_tile_spec",
+			                        "geometry", geometry, "north_pole", north_pole_tile, "discretization",
+			                        discretization, "conformal", conformal);
       else
-	id_tile = mpp_def_var(fid, "tile", MPP_CHAR, 1, dimlist, 6, "standard_name", "grid_tile_spec",
-			      "geometry", geometry, "north_pole", north_pole_tile, "projection", projection,
-			      "discretization", discretization, "conformal", conformal );
-      
+	      id_tile = mpp_def_var(fid, "tile", MPP_CHAR, 1, dimlist, 6, "standard_name", "grid_tile_spec",
+			                        "geometry", geometry, "north_pole", north_pole_tile, "projection", projection,
+			                        "discretization", discretization, "conformal", conformal);
+
       dims[0] = dimlist[4]; dims[1] = dimlist[3];
-      id_x = mpp_def_var(fid, "x", MPP_DOUBLE, 2, dims, 2, "standard_name", "geographic_longitude",
-        		 "units", "degree_east");
+      id_x  = mpp_def_var(fid, "x", MPP_DOUBLE, 2, dims, 2, "standard_name", "geographic_longitude",
+        		              "units", "degree_east");
       if(out_halo>0) mpp_def_var_att_double(fid, id_x, "_FillValue", MISSING_VALUE);
-      id_y = mpp_def_var(fid, "y", MPP_DOUBLE, 2, dims, 2, "standard_name", "geographic_latitude",
-			 "units", "degree_north");
+      id_y  = mpp_def_var(fid, "y", MPP_DOUBLE, 2, dims, 2, "standard_name", "geographic_latitude",
+			                    "units", "degree_north");
       if(out_halo>0) mpp_def_var_att_double(fid, id_y, "_FillValue", MISSING_VALUE);
       dims[0] = dimlist[4]; dims[1] = dimlist[1];
       id_dx = mpp_def_var(fid, "dx", MPP_DOUBLE, 2, dims, 2, "standard_name", "grid_edge_x_distance",
-			  "units", "meters");
+			                    "units", "meters");
       if(out_halo>0) mpp_def_var_att_double(fid, id_dx, "_FillValue", MISSING_VALUE);
       dims[0] = dimlist[2]; dims[1] = dimlist[3];
       id_dy = mpp_def_var(fid, "dy", MPP_DOUBLE, 2, dims, 2, "standard_name", "grid_edge_y_distance",
-			  "units", "meters");
+			                    "units", "meters");
       if(out_halo>0) mpp_def_var_att_double(fid, id_dy, "_FillValue", MISSING_VALUE);
       dims[0] = dimlist[2]; dims[1] = dimlist[1];
       id_area = mpp_def_var(fid, "area", MPP_DOUBLE, 2, dims, 2, "standard_name", "grid_cell_area",
-			    "units", "m2" );
+			                      "units", "m2" );
       if(out_halo>0) mpp_def_var_att_double(fid, id_area, "_FillValue", MISSING_VALUE);
       dims[0] = dimlist[4]; dims[1] = dimlist[3];
       id_angle_dx = mpp_def_var(fid, "angle_dx", MPP_DOUBLE, 2, dims, 2, "standard_name",
-				"grid_vertex_x_angle_WRT_geographic_east", "units", "degrees_east");
+				                        "grid_vertex_x_angle_WRT_geographic_east", "units", "degrees_east");
       if(out_halo>0) mpp_def_var_att_double(fid, id_angle_dx, "_FillValue", MISSING_VALUE);
       if(strcmp(conformal, "true") != 0) {
-	id_angle_dy = mpp_def_var(fid, "angle_dy", MPP_DOUBLE, 2, dims, 2, "standard_name",
-				  "grid_vertex_y_angle_WRT_geographic_north", "units", "degrees_north");
-	if(out_halo>0) mpp_def_var_att_double(fid, id_angle_dy, "_FillValue", MISSING_VALUE);
+	      id_angle_dy = mpp_def_var(fid, "angle_dy", MPP_DOUBLE, 2, dims, 2, "standard_name",
+				                          "grid_vertex_y_angle_WRT_geographic_north", "units", "degrees_north");
+	      if(out_halo>0) mpp_def_var_att_double(fid, id_angle_dy, "_FillValue", MISSING_VALUE);
       }
       if( strcmp(north_pole_arcx, "none") == 0)
-	id_arcx = mpp_def_var(fid, "arcx", MPP_CHAR, 1, dimlist, 1, "standard_name", "grid_edge_x_arc_type" );
+	      id_arcx = mpp_def_var(fid, "arcx", MPP_CHAR, 1, dimlist, 1, "standard_name", "grid_edge_x_arc_type" );
       else
-	id_arcx = mpp_def_var(fid, "arcx", MPP_CHAR, 1, dimlist, 2, "standard_name", "grid_edge_x_arc_type",
-			      "north_pole", north_pole_arcx );
+	      id_arcx = mpp_def_var(fid, "arcx", MPP_CHAR, 1, dimlist, 2, "standard_name", "grid_edge_x_arc_type",
+			                        "north_pole", north_pole_arcx );
       mpp_def_global_att(fid, "grid_version", grid_version);
       mpp_def_global_att(fid, "code_version", tagname);
       if(use_great_circle_algorithm) mpp_def_global_att(fid, "great_circle_algorithm", "TRUE");
       if(n>=ntiles_global) mpp_def_global_att(fid, "nest_grids", "TRUE");
       mpp_def_global_att(fid, "history", history);
-      
+
       mpp_end_def(fid);
       for(m=0; m<4; m++) { start[m] = 0; nwrite[m] = 0; }
       nwrite[0] = strlen(tilename);
       mpp_put_var_value_block(fid, id_tile, start, nwrite, tilename );
 
-      if(out_halo ==0) {
-	if (verbose) printf("[INFO] START NC XARRAY write out_halo=0 tile number = n: %d offset = pos_c: %d\n", n, pos_c);
-	if (verbose) printf("[INFO] XARRAY: n: %d x[0]: %f x[1]: %f x[2]: %f x[3]: %f x[4]: %f x[5]: %f x[10]: %f\n", n, x[pos_c], x[pos_c+1], x[pos_c+2], x[pos_c+3], x[pos_c+4], x[pos_c+5], x[pos_c+10]);
-	if (verbose && n > 0) printf("[INFO] XARRAY: n: %d x[0]: %f x[-1]: %f x[-2]: %f x[-3]: %f x[-4]: %f x[-5]: %f x[-10]: %f\n", n, x[pos_c], x[pos_c-1], x[pos_c-2], x[pos_c-3], x[pos_c-4], x[pos_c-5], x[pos_c-10]);
-
+      if(out_halo == 0) {
+        if (verbose) {
+          printf("[INFO] START NC XARRAY write out_halo=0 tile number = n: %d offset = pos_c: %d\n",
+                 n, pos_c);
+          printf("[INFO] XARRAY: n: %d x[0]: %f x[1]: %f x[2]: %f x[3]: %f x[4]: %f x[5]: %f x[10]: %f\n",
+                 n, x[pos_c], x[pos_c+1], x[pos_c+2], x[pos_c+3], x[pos_c+4], x[pos_c+5], x[pos_c+10]);
+          if (n > 0)
+            printf("[INFO] XARRAY: n: %d x[0]: %f x[-1]: %f x[-2]: %f x[-3]: %f x[-4]: %f x[-5]: %f x[-10]: %f\n",
+                   n, x[pos_c], x[pos_c-1], x[pos_c-2], x[pos_c-3], x[pos_c-4], x[pos_c-5], x[pos_c-10]);
+        }
         mpp_put_var_value(fid, id_x, x+pos_c);
-	mpp_put_var_value(fid, id_y, y+pos_c);
-	mpp_put_var_value(fid, id_dx, dx+pos_n);
-	mpp_put_var_value(fid, id_dy, dy+pos_e);
-	mpp_put_var_value(fid, id_area, area+pos_t);
-	mpp_put_var_value(fid, id_angle_dx, angle_dx+pos_c);
-	if(strcmp(conformal, "true") != 0) mpp_put_var_value(fid, id_angle_dy, angle_dy+pos_c);
+        mpp_put_var_value(fid, id_y, y+pos_c);
+        mpp_put_var_value(fid, id_dx, dx+pos_n);
+        mpp_put_var_value(fid, id_dy, dy+pos_e);
+        mpp_put_var_value(fid, id_area, area+pos_t);
+        mpp_put_var_value(fid, id_angle_dx, angle_dx+pos_c);
+        if(strcmp(conformal, "true") != 0) mpp_put_var_value(fid, id_angle_dy, angle_dy+pos_c);
       }
       else {
-	double *tmp;
+        double *tmp;
 
-	tmp = (double *)malloc((nxp+2*out_halo)*(nyp+2*out_halo)*sizeof(double));
-	if (verbose) printf("[INFO] INDEX NC write with halo tile number = n: %d \n", n);
-
-	fill_cubic_grid_halo(nx,ny,out_halo,tmp,x,x,n,1,1);
-	mpp_put_var_value(fid, id_x, tmp);
-	fill_cubic_grid_halo(nx,ny,out_halo,tmp,y,y,n,1,1);
-	mpp_put_var_value(fid, id_y, tmp);
+        tmp = (double *)malloc((nxp+2*out_halo)*(nyp+2*out_halo)*sizeof(double));
+        if (verbose) printf("[INFO] INDEX NC write with halo tile number = n: %d \n", n);
+        fill_cubic_grid_halo(nx,ny,out_halo,tmp,x,x,n,1,1);
+        mpp_put_var_value(fid, id_x, tmp);
+        fill_cubic_grid_halo(nx,ny,out_halo,tmp,y,y,n,1,1);
+        mpp_put_var_value(fid, id_y, tmp);
         fill_cubic_grid_halo(nx,ny,out_halo,tmp,angle_dx,angle_dx,n,1,1);
-	mpp_put_var_value(fid, id_angle_dx, tmp);
-	if(strcmp(conformal, "true") != 0) {
-	  fill_cubic_grid_halo(nx,ny,out_halo,tmp,angle_dy,angle_dy,n,1,1);
-	  mpp_put_var_value(fid, id_angle_dy, tmp);
-	}
-	
+        mpp_put_var_value(fid, id_angle_dx, tmp);
+        if(strcmp(conformal, "true") != 0) {
+          fill_cubic_grid_halo(nx,ny,out_halo,tmp,angle_dy,angle_dy,n,1,1);
+          mpp_put_var_value(fid, id_angle_dy, tmp);
+        }
+
         fill_cubic_grid_halo(nx,ny,out_halo,tmp,dx,dy,n,0,1);
-	mpp_put_var_value(fid, id_dx, tmp);
+        mpp_put_var_value(fid, id_dx, tmp);
         fill_cubic_grid_halo(nx,ny,out_halo,tmp,dy,dx,n,1,0);
-	mpp_put_var_value(fid, id_dy, tmp);
+        mpp_put_var_value(fid, id_dy, tmp);
         fill_cubic_grid_halo(nx,ny,out_halo,tmp,area,area,n,0,1);
-	mpp_put_var_value(fid, id_area, tmp);
-	free(tmp);
+        mpp_put_var_value(fid, id_area, tmp);
+        free(tmp);
       }
-	
+
       nwrite[0] = strlen(arcx);
       mpp_put_var_value_block(fid, id_arcx, start, nwrite, arcx );
-      
-      if (verbose) {
-	printf("About to close %s\n", outfile);
-      }
+
+      if (verbose) printf("About to close %s\n", outfile);
 
       mpp_close(fid);
 
-      /* Advance the pointers to the next tile */
-      /* Use the size of a full panel, not the nest, because code in create_gnomonic_cubic_grid uses ntile*size */
+      /* Advance the pointers to the next tile.
+         Use the size of a full panel, not the nest,
+         because code in create_gnomonic_cubic_grid
+         uses ntile*size */
 
       nx = nxl[n];
       ny = nyl[n];
       nxp = nx + 1;
       nyp = ny + 1;
 
-      printf("[INFO] INDEX Before increment n: %d pos_c %d nxp %d nyp %d nxp*nyp %d\n", n, pos_c, nxp, nyp, nxp*nyp);
+
+      if (verbose) printf("[INFO] INDEX Before increment n: %d pos_c %d nxp %d nyp %d nxp*nyp %d\n",
+                          n, pos_c, nxp, nyp, nxp*nyp);
       pos_c += nxp*nyp;
-      printf("[INFO] INDEX After increment n: %d pos_c %d.\n", n, pos_c);
+      if (verbose) printf("[INFO] INDEX After increment n: %d pos_c %d.\n", n, pos_c);
       pos_e += nxp*ny;
       pos_n += nx*nyp;
       pos_t += nx*ny;
-
-
     }
   }
 
@@ -1198,7 +1210,7 @@ int main(int argc, char* argv[])
   mpp_end();
 
   return 0;
-  
+
 };  /* end of main */
 
 
